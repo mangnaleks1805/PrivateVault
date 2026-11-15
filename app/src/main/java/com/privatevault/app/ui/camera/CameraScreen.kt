@@ -11,9 +11,15 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,10 +33,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Lock
@@ -55,11 +63,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -72,6 +83,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.privatevault.app.core.camera.CaptureMode
+import com.privatevault.app.core.camera.PrivacyFilter
+import com.privatevault.app.core.camera.PrivacyFilterProcessor
 import com.privatevault.app.ui.theme.AccentCyan
 import com.privatevault.app.ui.theme.AccentEmerald
 import com.privatevault.app.ui.theme.AccentRose
@@ -95,7 +108,9 @@ fun CameraScreen(
     val currentLens by viewModel.currentLens.collectAsState()
     val captureMode by viewModel.captureMode.collectAsState()
     val zoomState by viewModel.zoomState.collectAsState()
+    val currentFilter by viewModel.currentFilter.collectAsState()
 
+    var showFilterTray by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Multi-permission launcher (Camera + Microphone)
@@ -165,6 +180,55 @@ fun CameraScreen(
                     modifier = Modifier.fillMaxSize()
                 )
             }
+
+            if (currentFilter != PrivacyFilter.NONE) {
+                // Live Viewfinder Filter Aesthetic Tint
+                val overlayColor = when (currentFilter) {
+                    PrivacyFilter.NOIR -> Color(0xFF424242)
+                    PrivacyFilter.VINTAGE -> Color(0x55BCAAA4)
+                    PrivacyFilter.COOL_NIGHT -> Color(0x551A237E)
+                    PrivacyFilter.PRIVACY_BLUR -> Color(0x5537474F)
+                    PrivacyFilter.PIXELATE -> Color(0x66263238)
+                    else -> Color.Transparent
+                }
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .alpha(0.35f)
+                ) {
+                    drawRect(color = overlayColor, blendMode = BlendMode.Color)
+                }
+
+                // Active Filter Watermark Tag
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Charcoal900.copy(alpha = 0.8f),
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .statusBarsPadding()
+                        .padding(top = 58.dp, end = 16.dp)
+                        .border(1.dp, AccentCyan.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(AccentCyan)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "${currentFilter.displayName} (${currentFilter.badge})",
+                            color = AccentCyan,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
         } else {
             // Permission Rationale Card
             Column(
@@ -219,7 +283,11 @@ fun CameraScreen(
                 onClick = onBack,
                 enabled = !recordingState.isRecording
             ) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = Color.White
+                )
             }
 
             // Visible Recording Indicator & Timer
@@ -272,19 +340,51 @@ fun CameraScreen(
                     }
                 }
             } else {
-                // Encryption badge
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = Charcoal900.copy(alpha = 0.7f),
-                    modifier = Modifier.border(1.dp, AccentEmerald.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Encryption badge
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = Charcoal900.copy(alpha = 0.7f),
+                        modifier = Modifier.border(1.dp, AccentEmerald.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
                     ) {
-                        Icon(Icons.Default.Lock, contentDescription = null, tint = AccentEmerald, modifier = Modifier.size(12.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("AES-256 VAULT", color = AccentEmerald, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Lock, contentDescription = null, tint = AccentEmerald, modifier = Modifier.size(12.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("AES-256 VAULT", color = AccentEmerald, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // Privacy Filter Toggle Pill
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (showFilterTray) AccentCyan else Charcoal900.copy(alpha = 0.7f),
+                        modifier = Modifier
+                            .border(1.dp, if (showFilterTray) AccentCyan else TextSecondaryDark.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
+                            .clickable { showFilterTray = !showFilterTray }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AutoFixHigh,
+                                contentDescription = "Privacy Filters",
+                                tint = if (showFilterTray) Charcoal900 else AccentCyan,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = currentFilter.badge,
+                                color = if (showFilterTray) Charcoal900 else Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
@@ -316,6 +416,52 @@ fun CameraScreen(
                 .padding(vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Privacy Filter Tray (Horizontal Scrollable Strip)
+            AnimatedVisibility(
+                visible = showFilterTray && !recordingState.isRecording,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    PrivacyFilter.entries.forEach { filter ->
+                        val isSelected = currentFilter == filter
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (isSelected) AccentCyan else Charcoal800,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable { viewModel.setFilter(filter) }
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = filter.badge,
+                                    color = if (isSelected) Charcoal900 else AccentEmerald,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = filter.displayName,
+                                    color = if (isSelected) Charcoal900 else TextPrimaryDark,
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
             // Zoom indicator & quick zoom pills (Pinch to zoom also active)
             Row(
                 modifier = Modifier

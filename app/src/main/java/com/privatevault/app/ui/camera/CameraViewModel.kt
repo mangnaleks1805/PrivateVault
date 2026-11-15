@@ -8,6 +8,7 @@ import com.privatevault.app.core.camera.CameraManager
 import com.privatevault.app.core.camera.CameraRecordingState
 import com.privatevault.app.core.camera.CaptureMode
 import com.privatevault.app.core.camera.LensFacing
+import com.privatevault.app.core.camera.PrivacyFilter
 import com.privatevault.app.domain.repository.MediaRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,6 +43,9 @@ class CameraViewModel @Inject constructor(
     val captureMode: StateFlow<CaptureMode> = cameraManager.captureMode
     val zoomState: StateFlow<com.privatevault.app.core.camera.CameraZoomState> = cameraManager.zoomState
 
+    private val _currentFilter = MutableStateFlow(PrivacyFilter.NONE)
+    val currentFilter: StateFlow<PrivacyFilter> = _currentFilter.asStateFlow()
+
     fun onPermissionsResult(cameraGranted: Boolean, audioGranted: Boolean) {
         _uiState.update {
             it.copy(
@@ -67,6 +71,10 @@ class CameraViewModel @Inject constructor(
         cameraManager.setCaptureMode(mode)
     }
 
+    fun setFilter(filter: PrivacyFilter) {
+        _currentFilter.value = filter
+    }
+
     fun bindCamera(lifecycleOwner: LifecycleOwner, previewView: PreviewView) {
         cameraManager.bindCamera(lifecycleOwner, previewView)
     }
@@ -79,7 +87,7 @@ class CameraViewModel @Inject constructor(
             onSuccess = { tempFile ->
                 viewModelScope.launch {
                     runCatching {
-                        mediaRepository.saveCapturedPhoto(tempFile)
+                        mediaRepository.saveCapturedPhoto(tempFile, null, _currentFilter.value)
                         _uiState.update {
                             it.copy(
                                 isEncryptingAndSaving = false,

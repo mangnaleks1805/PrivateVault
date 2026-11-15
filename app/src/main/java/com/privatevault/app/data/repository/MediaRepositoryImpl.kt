@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
+import com.privatevault.app.core.camera.PrivacyFilter
+import com.privatevault.app.core.camera.PrivacyFilterProcessor
 import com.privatevault.app.core.di.IoDispatcher
 import com.privatevault.app.core.security.EncryptionService
 import com.privatevault.app.core.security.KeystoreManager
@@ -18,6 +20,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -67,7 +70,28 @@ class MediaRepositoryImpl @Inject constructor(
         return mediaItemDao.getTotalVaultSizeBytes()
     }
 
-    override suspend fun saveCapturedPhoto(tempFile: File, folderId: String?): MediaItem = withContext(ioDispatcher) {
+    override suspend fun saveCapturedPhoto(
+        tempFile: File,
+        folderId: String?,
+        filter: PrivacyFilter
+    ): MediaItem = withContext(ioDispatcher) {
+        // Apply offline privacy/discretion filter before hardware encryption
+        if (filter != PrivacyFilter.NONE) {
+            runCatching {
+                val rawBitmap = BitmapFactory.decodeFile(tempFile.absolutePath)
+                if (rawBitmap != null) {
+                    val filteredBitmap = PrivacyFilterProcessor.applyFilter(rawBitmap, filter)
+                    FileOutputStream(tempFile).use { out ->
+                        filteredBitmap.compress(Bitmap.CompressFormat.JPEG, 95, out)
+                    }
+                    rawBitmap.recycle()
+                    if (filteredBitmap != rawBitmap) {
+                        filteredBitmap.recycle()
+                    }
+                }
+            }
+        }
+
         val id = UUID.randomUUID().toString()
         val dek = encryptionService.generateDEK()
         val wrappedDek = encryptionService.wrapDEK(dek)
