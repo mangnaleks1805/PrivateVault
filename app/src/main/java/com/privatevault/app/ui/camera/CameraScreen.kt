@@ -181,16 +181,22 @@ fun CameraScreen(
                 )
             }
 
-            if (currentFilter != PrivacyFilter.NONE) {
-                // Live Viewfinder Filter Aesthetic Tint
+            if (currentFilter != PrivacyFilter.ORIGINAL) {
+                // Live Viewfinder Real-Time Shader Simulation
                 val overlayColor = when (currentFilter) {
-                    PrivacyFilter.NOIR -> Color(0xFF424242)
-                    PrivacyFilter.VINTAGE -> Color(0x55BCAAA4)
-                    PrivacyFilter.COOL_NIGHT -> Color(0x551A237E)
-                    PrivacyFilter.PRIVACY_BLUR -> Color(0x5537474F)
-                    PrivacyFilter.PIXELATE -> Color(0x66263238)
-                    else -> Color.Transparent
+                    PrivacyFilter.CLEAN_GLOW -> Color(0x22FFE0B2) // Warm soft glow
+                    PrivacyFilter.GOLDEN_HOUR -> Color(0x33FFB300) // Rich amber sunset
+                    PrivacyFilter.GLASS_SKIN -> Color(0x22E1F5FE) // Luminous dewy sheen
+                    PrivacyFilter.VINTAGE_90S -> Color(0x33D7CCC8) // Analog film tone
+                    PrivacyFilter.VOGUE_NOIR -> Color(0x66424242) // Dramatic monochrome
+                    PrivacyFilter.BLUSH_PEACH -> Color(0x33FFCCBC) // Flattering rosy blush
+                    PrivacyFilter.CYBER_MOODY -> Color(0x3300838F) // Cinematic teal & orange
+                    PrivacyFilter.ETHEREAL_DREAM -> Color(0x33FFF9C4) // Angelic highlight bloom
+                    PrivacyFilter.NIGHT_BOOST -> Color(0x2237474F) // Night clarity lift
+                    PrivacyFilter.ANONYMIZE -> Color(0x55212121) // Privacy shield
+                    PrivacyFilter.ORIGINAL -> Color.Transparent
                 }
+
                 Canvas(
                     modifier = Modifier
                         .fillMaxSize()
@@ -199,10 +205,23 @@ fun CameraScreen(
                     drawRect(color = overlayColor, blendMode = BlendMode.Color)
                 }
 
+                // Live Viewfinder Corner Vignette for Film / Golden Hour / Noir
+                if (currentFilter in listOf(PrivacyFilter.GOLDEN_HOUR, PrivacyFilter.VINTAGE_90S, PrivacyFilter.VOGUE_NOIR, PrivacyFilter.CYBER_MOODY)) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                androidx.compose.ui.graphics.Brush.radialGradient(
+                                    colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.55f))
+                                )
+                            )
+                    )
+                }
+
                 // Active Filter Watermark Tag
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = Charcoal900.copy(alpha = 0.8f),
+                    color = Charcoal900.copy(alpha = 0.85f),
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .statusBarsPadding()
@@ -221,7 +240,7 @@ fun CameraScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "${currentFilter.displayName} (${currentFilter.badge})",
+                            text = "${currentFilter.displayName} • ${currentFilter.badge}",
                             color = AccentCyan,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold
@@ -452,7 +471,13 @@ fun CameraScreen(
                                 Text(
                                     text = filter.displayName,
                                     color = if (isSelected) Charcoal900 else TextPrimaryDark,
-                                    fontSize = 10.sp
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                )
+                                Text(
+                                    text = filter.category,
+                                    color = if (isSelected) Charcoal900.copy(alpha = 0.7f) else TextSecondaryDark,
+                                    fontSize = 9.sp
                                 )
                             }
                         }

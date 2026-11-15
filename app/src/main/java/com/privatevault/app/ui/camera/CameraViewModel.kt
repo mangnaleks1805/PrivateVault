@@ -43,7 +43,7 @@ class CameraViewModel @Inject constructor(
     val captureMode: StateFlow<CaptureMode> = cameraManager.captureMode
     val zoomState: StateFlow<com.privatevault.app.core.camera.CameraZoomState> = cameraManager.zoomState
 
-    private val _currentFilter = MutableStateFlow(PrivacyFilter.NONE)
+    private val _currentFilter = MutableStateFlow(PrivacyFilter.ORIGINAL)
     val currentFilter: StateFlow<PrivacyFilter> = _currentFilter.asStateFlow()
 
     fun onPermissionsResult(cameraGranted: Boolean, audioGranted: Boolean) {

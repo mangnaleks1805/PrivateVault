@@ -76,7 +76,7 @@ class MediaRepositoryImpl @Inject constructor(
         filter: PrivacyFilter
     ): MediaItem = withContext(ioDispatcher) {
         // Apply offline privacy/discretion filter before hardware encryption
-        if (filter != PrivacyFilter.NONE) {
+        if (filter != PrivacyFilter.ORIGINAL) {
             runCatching {
                 val rawBitmap = BitmapFactory.decodeFile(tempFile.absolutePath)
                 if (rawBitmap != null) {

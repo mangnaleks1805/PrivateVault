@@ -16,7 +16,7 @@ interface MediaRepository {
     suspend fun saveCapturedPhoto(
         tempFile: File,
         folderId: String? = null,
-        filter: PrivacyFilter = PrivacyFilter.NONE
+        filter: PrivacyFilter = PrivacyFilter.ORIGINAL
     ): MediaItem
     suspend fun saveCapturedVideo(tempFile: File, durationMs: Long, folderId: String? = null): MediaItem
 
