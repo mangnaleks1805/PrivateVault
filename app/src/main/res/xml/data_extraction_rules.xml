@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Data extraction rules for Android 12 (API 31+).
+    Controls both cloud backup AND device-to-device transfer.
+    CRITICAL: Vault content must NEVER leave the device.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="vault/" />
+        <exclude domain="file" path="thumbs/" />
+        <exclude domain="file" path="tmp/" />
+        <exclude domain="database" path="vault_database" />
+        <exclude domain="database" path="vault_database-shm" />
+        <exclude domain="database" path="vault_database-wal" />
+        <exclude domain="file" path="datastore/" />
+        <exclude domain="sharedpref" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <!-- Vault content excluded from device-to-device transfers too -->
+        <exclude domain="file" path="vault/" />
+        <exclude domain="file" path="thumbs/" />
+        <exclude domain="database" path="vault_database" />
+        <exclude domain="file" path="datastore/" />
+    </device-transfer>
+</data-extraction-rules>

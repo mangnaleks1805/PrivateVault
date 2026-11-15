@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Network security config.
+    Phase 1-4: No network traffic at all (no INTERNET permission).
+    Phase 5+: Only HTTPS to our backend domain. No cleartext allowed.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
