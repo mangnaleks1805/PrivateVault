@@ -7,18 +7,28 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,15 +47,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Cameraswitch
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -70,9 +83,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -84,24 +101,23 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.privatevault.app.core.camera.CaptureMode
 import com.privatevault.app.core.camera.PrivacyFilter
-import com.privatevault.app.core.camera.PrivacyFilterProcessor
-import com.privatevault.app.ui.theme.AccentCyan
-import com.privatevault.app.ui.theme.AccentEmerald
-import com.privatevault.app.ui.theme.AccentRose
-import com.privatevault.app.ui.theme.Charcoal800
-import com.privatevault.app.ui.theme.Charcoal900
-import com.privatevault.app.ui.theme.TextPrimaryDark
-import com.privatevault.app.ui.theme.TextSecondaryDark
+import com.privatevault.app.ui.theme.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
 
 @Composable
 fun CameraScreen(
-    onBack: () -> Unit,
-    onMediaSaved: () -> Unit,
+    onNavigateToVault: () -> Unit,
+    onNavigateToSharing: () -> Unit,
+    onNavigateToSettings: () -> Unit,
+    onNavigateToAccount: () -> Unit,
+    onLockNow: () -> Unit,
     viewModel: CameraViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val haptic = LocalHapticFeedback.current
 
     val uiState by viewModel.uiState.collectAsState()
     val recordingState by viewModel.recordingState.collectAsState()
@@ -110,7 +126,10 @@ fun CameraScreen(
     val zoomState by viewModel.zoomState.collectAsState()
     val currentFilter by viewModel.currentFilter.collectAsState()
 
-    var showFilterTray by remember { mutableStateOf(false) }
+    var showFilterCarousel by remember { mutableStateOf(false) }
+    var recentSavedPillVisible by remember { mutableStateOf(false) }
+    var isShutterPressed by remember { mutableStateOf(false) }
+    var vaultDestination by remember { mutableStateOf("SOLO") }
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Multi-permission launcher (Camera + Microphone)
@@ -150,25 +169,67 @@ fun CameraScreen(
         }
     }
 
-    // Snackbar notifications
-    LaunchedEffect(uiState.savedMessage, uiState.errorMessage) {
+    // Show recent saved pill on capture
+    LaunchedEffect(uiState.savedMessage) {
         uiState.savedMessage?.let {
-            snackbarHostState.showSnackbar(it)
+            recentSavedPillVisible = true
+            delay(3500)
+            recentSavedPillVisible = false
             viewModel.clearMessages()
         }
+    }
+
+    LaunchedEffect(uiState.errorMessage) {
         uiState.errorMessage?.let {
             snackbarHostState.showSnackbar(it)
             viewModel.clearMessages()
         }
     }
 
+    // Shutter scale spring physics
+    val shutterScale by animateFloatAsState(
+        targetValue = if (isShutterPressed || recordingState.isRecording) 0.90f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "shutterScale"
+    )
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
+            // ═══════════════════════════════════════════════════════════════
+            // SNAPCHAT HORIZONTAL SWIPE GESTURES (Swipe to Vault / Share)
+            // ═══════════════════════════════════════════════════════════════
+            .pointerInput(Unit) {
+                var totalDragX = 0f
+                detectHorizontalDragGestures(
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        totalDragX += dragAmount
+                    },
+                    onDragEnd = {
+                        if (totalDragX > 140f) {
+                            // Swipe Left-to-Right -> Opens Vault (Memories)
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onNavigateToVault()
+                        } else if (totalDragX < -140f) {
+                            // Swipe Right-to-Left -> Opens Controlled Sharing
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onNavigateToSharing()
+                        }
+                        totalDragX = 0f
+                    },
+                    onDragCancel = {
+                        totalDragX = 0f
+                    }
+                )
+            }
     ) {
         if (uiState.hasCameraPermission) {
-            // CameraX Viewfinder with pinch-to-zoom & tap-to-focus
+            // Full-Bleed CameraX Viewfinder
             key(currentLens) {
                 AndroidView(
                     factory = { ctx ->
@@ -181,8 +242,22 @@ fun CameraScreen(
                 )
             }
 
+            // Viewfinder Double-Tap Gesture Layer to Flip Camera
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onDoubleTap = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                viewModel.switchLens()
+                            }
+                        )
+                    }
+            )
+
+            // Live Filter Atmospheric Layer (Overlay / Vignette)
             if (currentFilter != PrivacyFilter.ORIGINAL) {
-                // Live Viewfinder Vignette Overlay for Golden Hour, 90s Film, Noir & Teal-Orange
                 if (currentFilter in listOf(PrivacyFilter.GOLDEN_HOUR, PrivacyFilter.VINTAGE_90S, PrivacyFilter.VOGUE_NOIR, PrivacyFilter.CYBER_MOODY)) {
                     Box(
                         modifier = Modifier
@@ -195,7 +270,6 @@ fun CameraScreen(
                     )
                 }
 
-                // Live Subtle Ambient Atmosphere (Overlay blend mode preserves blacks and highlights)
                 val ambientMood = when (currentFilter) {
                     PrivacyFilter.GOLDEN_HOUR -> Color(0x35FFA000)
                     PrivacyFilter.BLUSH_PEACH -> Color(0x28FF8A80)
@@ -210,32 +284,26 @@ fun CameraScreen(
                     }
                 }
 
-                // Active Filter Watermark Tag
+                // Active Filter Pill in Viewfinder
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Charcoal900.copy(alpha = 0.85f),
+                    shape = RoundedCornerShape(14.dp),
+                    color = TitaniumCanvas.copy(alpha = 0.85f),
                     modifier = Modifier
-                        .align(Alignment.TopEnd)
+                        .align(Alignment.TopCenter)
                         .statusBarsPadding()
-                        .padding(top = 58.dp, end = 16.dp)
-                        .border(1.dp, AccentCyan.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                        .padding(top = 56.dp)
+                        .border(1.dp, BorderHighlight, RoundedCornerShape(14.dp))
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(AccentCyan)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "${currentFilter.displayName} • ${currentFilter.badge}",
-                            color = AccentCyan,
+                            text = "✨ ${currentFilter.displayName} (${currentFilter.badge})",
+                            color = TitaniumWhite,
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp
                         )
                     }
                 }
@@ -252,21 +320,21 @@ fun CameraScreen(
                 Icon(
                     imageVector = Icons.Default.Lock,
                     contentDescription = null,
-                    tint = AccentCyan,
+                    tint = TitaniumSilver,
                     modifier = Modifier.size(64.dp)
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "Camera Permission Required",
                     style = MaterialTheme.typography.titleLarge,
-                    color = TextPrimaryDark,
+                    color = TitaniumWhite,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Private Vault captures directly to an encrypted local vault. Your media is never shared or stored in public storage.",
+                    text = "PrivateLens captures directly to an encrypted local vault. Your media is never shared or stored in public storage.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondaryDark,
+                    color = TextSecondary,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
                 Spacer(modifier = Modifier.height(24.dp))
@@ -274,14 +342,16 @@ fun CameraScreen(
                     onClick = {
                         permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO))
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentCyan, contentColor = Charcoal900)
+                    colors = ButtonDefaults.buttonColors(containerColor = TitaniumWhite, contentColor = TitaniumTextDark)
                 ) {
-                    Text("Grant Permission")
+                    Text("Grant Permission", fontWeight = FontWeight.Bold)
                 }
             }
         }
 
-        // Top Control Bar
+        // ═══════════════════════════════════════════════════════════════════
+        // TOP CONTROL BAR (Snapchat Style)
+        // ═══════════════════════════════════════════════════════════════════
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -290,18 +360,24 @@ fun CameraScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Left: Profile & Account Button
             IconButton(
-                onClick = onBack,
-                enabled = !recordingState.isRecording
+                onClick = onNavigateToAccount,
+                enabled = !recordingState.isRecording,
+                modifier = Modifier
+                    .size(42.dp)
+                    .background(TitaniumSurfaceGlass, CircleShape)
+                    .border(1.dp, BorderSubtle, CircleShape)
             ) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = Color.White
+                    imageVector = Icons.Default.Person,
+                    contentDescription = "Profile & Account",
+                    tint = TitaniumWhite,
+                    modifier = Modifier.size(20.dp)
                 )
             }
 
-            // Visible Recording Indicator & Timer
+            // Center: Status Badge (Recording or AES-256 Vault)
             if (recordingState.isRecording) {
                 val infiniteTransition = rememberInfiniteTransition(label = "pulse")
                 val pulseAlpha by infiniteTransition.animateFloat(
@@ -316,160 +392,226 @@ fun CameraScreen(
 
                 Surface(
                     shape = RoundedCornerShape(20.dp),
-                    color = Charcoal900.copy(alpha = 0.85f),
-                    modifier = Modifier.border(1.dp, AccentRose, RoundedCornerShape(20.dp))
+                    color = TitaniumSurfaceGlass,
+                    modifier = Modifier.border(1.dp, LeicaRed.copy(alpha = 0.8f), RoundedCornerShape(20.dp))
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(10.dp)
+                                .size(8.dp)
                                 .clip(CircleShape)
-                                .background(AccentRose)
+                                .background(LeicaRed)
                                 .alpha(if (recordingState.isPaused) 1f else pulseAlpha)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "REC",
+                            color = LeicaRed,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
                         val minutes = recordingState.durationSeconds / 60
                         val seconds = recordingState.durationSeconds % 60
                         Text(
                             text = String.format(Locale.US, "%02d:%02d", minutes, seconds),
-                            color = Color.White,
+                            color = TitaniumWhite,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
+                            fontSize = 13.sp
                         )
                         if (recordingState.isPaused) {
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = "PAUSED",
-                                color = AccentRose,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
+                                color = TextSecondary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp
                             )
                         }
                     }
                 }
             } else {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Encryption badge
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = Charcoal900.copy(alpha = 0.7f),
-                        modifier = Modifier.border(1.dp, AccentEmerald.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = TitaniumSurfaceGlass,
+                    modifier = Modifier.border(1.dp, BorderSubtle, RoundedCornerShape(16.dp))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.Lock, contentDescription = null, tint = AccentEmerald, modifier = Modifier.size(12.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("AES-256 VAULT", color = AccentEmerald, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    // Privacy Filter Toggle Pill
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = if (showFilterTray) AccentCyan else Charcoal900.copy(alpha = 0.7f),
-                        modifier = Modifier
-                            .border(1.dp, if (showFilterTray) AccentCyan else TextSecondaryDark.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
-                            .clickable { showFilterTray = !showFilterTray }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AutoFixHigh,
-                                contentDescription = "Privacy Filters",
-                                tint = if (showFilterTray) Charcoal900 else AccentCyan,
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = currentFilter.badge,
-                                color = if (showFilterTray) Charcoal900 else Color.White,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = TitaniumSilver,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "AES-256 VAULT",
+                            color = TitaniumSilver,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 0.8.sp
+                        )
                     }
                 }
             }
 
-            // Audio Toggle (only applies in video mode)
-            if (captureMode == CaptureMode.VIDEO) {
-                IconButton(
-                    onClick = viewModel::toggleAudio,
-                    enabled = !recordingState.isRecording
+            // Right: Spacer to keep AES-256 status pill centered without buttons
+            Spacer(modifier = Modifier.size(42.dp))
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // FLOATING SNAPCHAT-STYLE SAVED NOTIFICATION TOAST
+        // ═══════════════════════════════════════════════════════════════════
+        AnimatedVisibility(
+            visible = recentSavedPillVisible,
+            enter = fadeIn() + slideInVertically(initialOffsetY = { 60 }),
+            exit = fadeOut() + slideOutVertically(targetOffsetY = { 60 }),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = 150.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = TitaniumCanvas.copy(alpha = 0.95f),
+                modifier = Modifier
+                    .border(1.dp, BorderHighlight, RoundedCornerShape(24.dp))
+                    .clickable { onNavigateToVault() }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = if (uiState.isAudioEnabled && uiState.hasAudioPermission) Icons.Default.Mic else Icons.Default.MicOff,
-                        contentDescription = "Audio Toggle",
-                        tint = if (uiState.isAudioEnabled) AccentCyan else Color.Gray
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = null,
+                        tint = StatusSuccess,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Encrypted to Vault",
+                        color = TitaniumWhite,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "VIEW",
+                        color = TitaniumSilver,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 1.sp
                     )
                 }
-            } else {
-                Spacer(modifier = Modifier.size(48.dp))
             }
         }
 
-        // Bottom Controls Overlay
+        // ═══════════════════════════════════════════════════════════════════
+        // BOTTOM CONTROLS & SNAPCHAT-STYLE LENS DOCK
+        // ═══════════════════════════════════════════════════════════════════
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .background(Charcoal900.copy(alpha = 0.75f))
+                .background(TitaniumCanvas.copy(alpha = 0.88f))
                 .navigationBarsPadding()
-                .padding(vertical = 16.dp),
+                .padding(vertical = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Privacy Filter Tray (Horizontal Scrollable Strip)
+            // SNAPCHAT LENS CAROUSEL (Horizontal Strip with Spring Scaling)
             AnimatedVisibility(
-                visible = showFilterTray && !recordingState.isRecording,
+                visible = showFilterCarousel && !recordingState.isRecording,
                 enter = fadeIn() + expandVertically(),
                 exit = fadeOut() + shrinkVertically()
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(bottom = 10.dp)
                 ) {
-                    PrivacyFilter.entries.forEach { filter ->
-                        val isSelected = currentFilter == filter
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = if (isSelected) AccentCyan else Charcoal800,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(14.dp))
-                                .clickable { viewModel.setFilter(filter) }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "BEAUTY & PRIVACY LENSES",
+                            color = TitaniumSilver,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.2.sp
+                        )
+                        IconButton(
+                            onClick = { showFilterCarousel = false },
+                            modifier = Modifier.size(24.dp)
                         ) {
+                            Icon(Icons.Default.Close, contentDescription = "Close", tint = TextSecondary, modifier = Modifier.size(16.dp))
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        PrivacyFilter.entries.forEach { filter ->
+                            val isSelected = currentFilter == filter
+                            val lensScale by animateFloatAsState(
+                                targetValue = if (isSelected) 1.12f else 0.92f,
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                    stiffness = Spring.StiffnessMedium
+                                ),
+                                label = "lensScale"
+                            )
+
                             Column(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .scale(lensScale)
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        viewModel.setFilter(filter)
+                                    }
+                                    .padding(vertical = 4.dp)
                             ) {
-                                Text(
-                                    text = filter.badge,
-                                    color = if (isSelected) Charcoal900 else AccentEmerald,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(54.dp)
+                                        .clip(CircleShape)
+                                        .background(if (isSelected) TitaniumWhite else TitaniumSurfaceGlass)
+                                        .border(
+                                            width = if (isSelected) 2.5.dp else 1.dp,
+                                            color = if (isSelected) TitaniumWhite else BorderSubtle,
+                                            shape = CircleShape
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = filter.badge,
+                                        color = if (isSelected) TitaniumTextDark else TitaniumWhite,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = filter.displayName,
-                                    color = if (isSelected) Charcoal900 else TextPrimaryDark,
-                                    fontSize = 11.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                )
-                                Text(
-                                    text = filter.category,
-                                    color = if (isSelected) Charcoal900.copy(alpha = 0.7f) else TextSecondaryDark,
-                                    fontSize = 9.sp
+                                    color = if (isSelected) TitaniumWhite else TextSecondary,
+                                    fontSize = 10.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                                 )
                             }
                         }
@@ -477,14 +619,13 @@ fun CameraScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // Zoom indicator & quick zoom pills (Pinch to zoom also active)
+            // Quick Zoom Pills (1x, 2x)
             Row(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Charcoal800)
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(TitaniumSurfaceGlass)
+                    .border(1.dp, BorderSubtle, RoundedCornerShape(18.dp))
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -493,13 +634,16 @@ fun CameraScreen(
                     Box(
                         modifier = Modifier
                             .clip(CircleShape)
-                            .background(if (isSelected) AccentCyan else Color.Transparent)
-                            .clickable { viewModel.setZoomRatio(targetZoom) }
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                            .background(if (isSelected) TitaniumWhite else Color.Transparent)
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                viewModel.setZoomRatio(targetZoom)
+                            }
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
                     ) {
                         Text(
                             text = "${targetZoom.toInt()}x",
-                            color = if (isSelected) Charcoal900 else TextSecondaryDark,
+                            color = if (isSelected) TitaniumTextDark else TextSecondary,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                             fontSize = 12.sp
                         )
@@ -509,7 +653,7 @@ fun CameraScreen(
                 if (zoomState.zoomRatio > 1.15f && (zoomState.zoomRatio - 2f).let { it < -0.15f || it > 0.15f }) {
                     Text(
                         text = String.format(Locale.US, "%.1fx", zoomState.zoomRatio),
-                        color = AccentEmerald,
+                        color = TitaniumSilver,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,
                         modifier = Modifier.padding(horizontal = 6.dp)
@@ -517,142 +661,267 @@ fun CameraScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Mode Selector (Photo vs Video)
+            // Mode Selector (PHOTO vs VIDEO)
             if (!recordingState.isRecording) {
                 Row(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(Charcoal800)
-                        .padding(4.dp),
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(TitaniumSurfaceGlass)
+                        .border(1.dp, BorderSubtle, RoundedCornerShape(20.dp))
+                        .padding(2.dp),
                     horizontalArrangement = Arrangement.Center
                 ) {
                     ModeTab(
                         title = "PHOTO",
                         selected = captureMode == CaptureMode.PHOTO,
-                        onClick = { viewModel.setCaptureMode(CaptureMode.PHOTO) }
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            viewModel.setCaptureMode(CaptureMode.PHOTO)
+                        }
                     )
                     ModeTab(
                         title = "VIDEO",
                         selected = captureMode == CaptureMode.VIDEO,
-                        onClick = { viewModel.setCaptureMode(CaptureMode.VIDEO) }
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            viewModel.setCaptureMode(CaptureMode.VIDEO)
+                        }
                     )
                 }
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
             }
 
-            // Shutter & Actions Bar
+            // ═══════════════════════════════════════════════════════════════
+            // VAULT SCOPE TOGGLE: [ Solo Vault ] vs [ Duo (Alex) ]
+            // ═══════════════════════════════════════════════════════════════
+            if (!recordingState.isRecording) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(TitaniumSurfaceGlass)
+                        .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp))
+                        .padding(2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(if (vaultDestination == "SOLO") TitaniumWhite else Color.Transparent)
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                vaultDestination = "SOLO"
+                            }
+                            .padding(horizontal = 14.dp, vertical = 5.dp)
+                    ) {
+                        Text(
+                            text = "Solo Vault",
+                            color = if (vaultDestination == "SOLO") androidx.compose.ui.graphics.Color.Black else TitaniumSilver,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(if (vaultDestination == "DUO") AccentCyan else Color.Transparent)
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                vaultDestination = "DUO"
+                            }
+                            .padding(horizontal = 14.dp, vertical = 5.dp)
+                    ) {
+                        Text(
+                            text = "Duo Vault (Alex)",
+                            color = if (vaultDestination == "DUO") androidx.compose.ui.graphics.Color.Black else TitaniumSilver,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(14.dp))
+            }
+
+            // ═══════════════════════════════════════════════════════════════
+            // MAIN SNAPCHAT DOCK (Vault, Shutter with Hold-to-Record, Share)
+            // ═══════════════════════════════════════════════════════════════
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 32.dp),
+                    .padding(horizontal = 24.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left slot: Lens Switcher (disabled during video recording)
-                if (!recordingState.isRecording) {
-                    IconButton(
-                        onClick = viewModel::switchLens,
-                        modifier = Modifier
-                            .size(52.dp)
-                            .background(Charcoal800, CircleShape)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Cameraswitch,
-                            contentDescription = "Switch Camera",
-                            tint = Color.White
-                        )
+                // LEFT: Encrypted Vault Shortcut (Snapchat Memories / Camera Roll)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onNavigateToVault()
                     }
-                } else {
-                    // While recording: Pause/Resume button
-                    IconButton(
-                        onClick = {
-                            if (recordingState.isPaused) {
-                                viewModel.resumeVideoRecording()
-                            } else {
-                                viewModel.pauseVideoRecording()
-                            }
-                        },
-                        modifier = Modifier
-                            .size(52.dp)
-                            .background(Charcoal800, CircleShape)
-                    ) {
-                        Icon(
-                            imageVector = if (recordingState.isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
-                            contentDescription = "Pause/Resume",
-                            tint = Color.White
-                        )
-                    }
-                }
-
-                // Center slot: Big Shutter / Record Button
-                if (captureMode == CaptureMode.PHOTO) {
-                    // Photo Shutter
+                ) {
                     Box(
                         modifier = Modifier
-                            .size(80.dp)
-                            .border(4.dp, Color.White, CircleShape)
-                            .padding(6.dp)
-                            .clip(CircleShape)
-                            .background(Color.White)
-                            .clickable(enabled = !uiState.isEncryptingAndSaving) {
-                                viewModel.capturePhoto {
-                                    onMediaSaved()
-                                }
-                            }
+                            .size(54.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(TitaniumSurfaceGlass)
+                            .border(1.5.dp, BorderHighlight, RoundedCornerShape(16.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PhotoLibrary,
+                            contentDescription = "Encrypted Vault",
+                            tint = TitaniumWhite,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = "VAULT",
+                        color = TitaniumSilver,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
                     )
-                } else {
-                    // Video Shutter / Stop
-                    if (!recordingState.isRecording) {
-                        // Start Record Button
-                        Box(
-                            modifier = Modifier
-                                .size(80.dp)
-                                .border(4.dp, Color.White, CircleShape)
-                                .padding(6.dp)
-                                .clip(CircleShape)
-                                .background(AccentRose)
-                                .clickable(enabled = !uiState.isEncryptingAndSaving) {
-                                    viewModel.startVideoRecording()
-                                }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.FiberManualRecord,
-                                contentDescription = "Start Recording",
-                                tint = Color.White,
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .align(Alignment.Center)
+                }
+
+                // CENTER: Big Shutter with Snapchat Hold-to-Record Gesture
+                Box(
+                    modifier = Modifier
+                        .scale(shutterScale)
+                            .size(86.dp)
+                            .border(
+                                width = if (recordingState.isRecording) 4.dp else 3.5.dp,
+                                color = if (recordingState.isRecording) LeicaRed else TitaniumSilver,
+                                shape = CircleShape
                             )
-                        }
-                    } else {
-                        // Stop Record Button
-                        Box(
-                            modifier = Modifier
-                                .size(80.dp)
-                                .border(4.dp, AccentRose, CircleShape)
-                                .padding(12.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(AccentRose)
-                                .clickable {
-                                    viewModel.stopVideoRecording()
+                            .padding(5.dp)
+                            .clip(CircleShape)
+                            .background(if (recordingState.isRecording || captureMode == CaptureMode.VIDEO) LeicaRed else TitaniumWhite)
+                            .pointerInput(recordingState.isRecording, captureMode) {
+                                awaitEachGesture {
+                                    val down = awaitFirstDown()
+                                    isShutterPressed = true
+
+                                    // Wait for either release or long press timeout (300ms)
+                                    val upOrCancel = withTimeoutOrNull(300) {
+                                        waitForUpOrCancellation()
+                                    }
+
+                                    if (upOrCancel != null) {
+                                        // Quick Tap (<300ms)
+                                        isShutterPressed = false
+                                        if (captureMode == CaptureMode.PHOTO) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            viewModel.capturePhoto { }
+                                        } else {
+                                            // In Video mode: tap starts or stops
+                                            if (!recordingState.isRecording) {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                viewModel.startVideoRecording()
+                                            } else {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                viewModel.stopVideoRecording()
+                                            }
+                                        }
+                                    } else {
+                                        // Hold (>300ms) -> Snapchat Hold-to-Record Video with Drag-to-Zoom!
+                                        val startY = down.position.y
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        if (!recordingState.isRecording) {
+                                            viewModel.setCaptureMode(CaptureMode.VIDEO)
+                                            viewModel.startVideoRecording()
+                                        }
+
+                                        // Snapchat One-Handed Drag-to-Zoom Gesture Loop
+                                        var lastHapticStep = 1
+                                        while (true) {
+                                            val event = awaitPointerEvent()
+                                            val change = event.changes.firstOrNull() ?: break
+                                            if (change.pressed) {
+                                                val dragDistanceY = startY - change.position.y
+                                                if (dragDistanceY > 20f) {
+                                                    val progress = (dragDistanceY / 420f).coerceIn(0f, 1f)
+                                                    val targetZoom = 1f + progress * 4f // 1.0x to 5.0x
+                                                    viewModel.setZoomRatio(targetZoom)
+
+                                                    val step = targetZoom.toInt()
+                                                    if (step > lastHapticStep) {
+                                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                        lastHapticStep = step
+                                                    }
+                                                } else {
+                                                    viewModel.setZoomRatio(1f)
+                                                    lastHapticStep = 1
+                                                }
+                                                change.consume()
+                                            } else {
+                                                break
+                                            }
+                                        }
+
+                                        isShutterPressed = false
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        if (recordingState.isRecording) {
+                                            viewModel.stopVideoRecording()
+                                        }
+                                        viewModel.setZoomRatio(1f)
+                                    }
                                 }
-                        ) {
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (recordingState.isRecording) {
                             Icon(
                                 imageVector = Icons.Default.Stop,
-                                contentDescription = "Stop Recording",
-                                tint = Color.White,
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .align(Alignment.Center)
+                                contentDescription = "Recording",
+                                tint = TitaniumWhite,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        } else if (captureMode == CaptureMode.VIDEO) {
+                            Icon(
+                                imageVector = Icons.Default.FiberManualRecord,
+                                contentDescription = "Video Mode",
+                                tint = TitaniumWhite,
+                                modifier = Modifier.size(36.dp)
                             )
                         }
                     }
-                }
 
-                // Right slot: Placeholder for balance
-                Spacer(modifier = Modifier.size(52.dp))
+                // RIGHT: Snapchat Filter & Lens Toggle (Replaces Share on Home Screen)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        showFilterCarousel = !showFilterCarousel
+                    }
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(54.dp)
+                            .clip(CircleShape)
+                            .background(if (showFilterCarousel || currentFilter != PrivacyFilter.ORIGINAL) TitaniumWhite else TitaniumSurfaceGlass)
+                            .border(1.5.dp, if (showFilterCarousel || currentFilter != PrivacyFilter.ORIGINAL) TitaniumWhite else BorderHighlight, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AutoFixHigh,
+                            contentDescription = "Lenses & Filters",
+                            tint = if (showFilterCarousel || currentFilter != PrivacyFilter.ORIGINAL) TitaniumTextDark else TitaniumWhite,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = "LENSES",
+                        color = TitaniumSilver,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    )
+                }
             }
         }
 
@@ -662,26 +931,26 @@ fun CameraScreen(
             modifier = Modifier.align(Alignment.Center)
         ) {
             Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = Charcoal900.copy(alpha = 0.9f),
-                modifier = Modifier.border(1.dp, AccentCyan, RoundedCornerShape(16.dp))
+                shape = RoundedCornerShape(18.dp),
+                color = TitaniumCanvas.copy(alpha = 0.94f),
+                modifier = Modifier.border(1.dp, BorderHighlight, RoundedCornerShape(18.dp))
             ) {
                 Column(
-                    modifier = Modifier.padding(24.dp),
+                    modifier = Modifier.padding(28.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    CircularProgressIndicator(color = AccentCyan, modifier = Modifier.size(44.dp))
+                    CircularProgressIndicator(color = TitaniumWhite, modifier = Modifier.size(44.dp))
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         text = "Encrypting & Storing...",
-                        color = TextPrimaryDark,
+                        color = TitaniumWhite,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.bodyLarge
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "AES-256-GCM hardware encryption",
-                        color = TextSecondaryDark,
+                        text = "AES-256-GCM hardware keystore encryption",
+                        color = TextSecondary,
                         style = MaterialTheme.typography.labelSmall
                     )
                 }
@@ -706,16 +975,17 @@ private fun ModeTab(
 ) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(if (selected) AccentCyan else Color.Transparent)
+            .clip(RoundedCornerShape(18.dp))
+            .background(if (selected) TitaniumWhite else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = 14.dp, vertical = 6.dp)
     ) {
         Text(
             text = title,
-            color = if (selected) Charcoal900 else TextSecondaryDark,
+            color = if (selected) TitaniumTextDark else TextSecondary,
             fontWeight = FontWeight.Bold,
-            fontSize = 12.sp
+            fontSize = 11.sp,
+            letterSpacing = 0.5.sp
         )
     }
 }

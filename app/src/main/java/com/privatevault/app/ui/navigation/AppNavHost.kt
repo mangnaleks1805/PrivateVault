@@ -31,7 +31,7 @@ fun AppNavHost(
         composable(Screen.Onboarding.route) {
             OnboardingScreen(
                 onOnboardingComplete = {
-                    navController.navigate(Screen.Home.route) {
+                    navController.navigate(Screen.Camera.route) {
                         popUpTo(Screen.Onboarding.route) { inclusive = true }
                     }
                 }
@@ -43,7 +43,7 @@ fun AppNavHost(
                 activity = activity,
                 biometricHelper = biometricHelper,
                 onUnlocked = {
-                    navController.navigate(Screen.Home.route) {
+                    navController.navigate(Screen.Camera.route) {
                         popUpTo(Screen.Lock.route) { inclusive = true }
                     }
                 }
@@ -67,15 +67,22 @@ fun AppNavHost(
 
         composable(Screen.Camera.route) {
             CameraScreen(
-                onBack = { navController.popBackStack() },
-                onMediaSaved = { navController.navigate(Screen.Vault.route) }
+                onNavigateToVault = { navController.navigate(Screen.Vault.route) },
+                onNavigateToSharing = { navController.navigate(Screen.Sharing.route) },
+                onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
+                onNavigateToAccount = { navController.navigate(Screen.Account.route) },
+                onLockNow = {
+                    navController.navigate(Screen.Lock.route) {
+                        popUpTo(Screen.Camera.route) { inclusive = true }
+                    }
+                }
             )
         }
 
         composable(Screen.Vault.route) {
             VaultScreen(
                 onBack = { navController.popBackStack() },
-                onNavigateToCamera = { navController.navigate(Screen.Camera.route) },
+                onNavigateToCamera = { navController.popBackStack() },
                 encryptionService = encryptionService
             )
         }

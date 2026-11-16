@@ -72,15 +72,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.privatevault.app.core.security.EncryptionService
 import com.privatevault.app.domain.model.MediaItem
 import com.privatevault.app.domain.model.MediaType
-import com.privatevault.app.ui.theme.AccentCyan
-import com.privatevault.app.ui.theme.AccentEmerald
-import com.privatevault.app.ui.theme.AccentRose
-import com.privatevault.app.ui.theme.Charcoal600
-import com.privatevault.app.ui.theme.Charcoal700
-import com.privatevault.app.ui.theme.Charcoal800
-import com.privatevault.app.ui.theme.Charcoal900
-import com.privatevault.app.ui.theme.TextPrimaryDark
-import com.privatevault.app.ui.theme.TextSecondaryDark
+import com.privatevault.app.ui.theme.*
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -97,6 +89,7 @@ fun VaultScreen(
 
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var newFolderName by remember { mutableStateOf("") }
+    var selectedVaultScope by remember { mutableStateOf("ALL") }
 
     Box(
         modifier = Modifier
@@ -207,6 +200,62 @@ fun VaultScreen(
                 }
             }
 
+            // Vault Scope Tabs: [ All Vaults ] | [ Solo Vault ] | [ Duo (Alex) ]
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Surface(
+                    onClick = { selectedVaultScope = "ALL" },
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (selectedVaultScope == "ALL") AccentCyan else Charcoal800,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(modifier = Modifier.padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "All Vaults",
+                            color = if (selectedVaultScope == "ALL") Charcoal900 else TextSecondaryDark,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Surface(
+                    onClick = { selectedVaultScope = "SOLO" },
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (selectedVaultScope == "SOLO") TitaniumWhite else Charcoal800,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(modifier = Modifier.padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "Solo Vault",
+                            color = if (selectedVaultScope == "SOLO") Charcoal900 else TextSecondaryDark,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Surface(
+                    onClick = { selectedVaultScope = "DUO" },
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (selectedVaultScope == "DUO") AccentCyan else Charcoal800,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(modifier = Modifier.padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "Duo (Alex)",
+                            color = if (selectedVaultScope == "DUO") Charcoal900 else TextSecondaryDark,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
             // Filter Tabs (All / Photos / Videos)
             Row(
                 modifier = Modifier
@@ -277,7 +326,7 @@ fun VaultScreen(
                 }
             } else {
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(3),
+                    columns = GridCells.Adaptive(minSize = 150.dp),
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -450,6 +499,22 @@ private fun MediaThumbnailItem(
                     modifier = Modifier.size(28.dp)
                 )
             }
+        }
+
+        // Scope Badge (SOLO vs DUO)
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(4.dp)
+                .background(Charcoal900.copy(alpha = 0.85f), RoundedCornerShape(4.dp))
+                .padding(horizontal = 4.dp, vertical = 2.dp)
+        ) {
+            Text(
+                text = if (item.id.hashCode() % 2 == 0) "SOLO" else "DUO",
+                color = if (item.id.hashCode() % 2 == 0) Zinc300 else AccentCyan,
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
 
         // Video Badge

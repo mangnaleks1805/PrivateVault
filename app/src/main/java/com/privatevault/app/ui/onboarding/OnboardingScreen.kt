@@ -1,17 +1,23 @@
 package com.privatevault.app.ui.onboarding
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
@@ -23,18 +29,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.privatevault.app.ui.onboarding.pages.ConsentExplainerPage
 import com.privatevault.app.ui.onboarding.pages.EligibilityConfirmPage
 import com.privatevault.app.ui.onboarding.pages.LocalStorageExplainerPage
 import com.privatevault.app.ui.onboarding.pages.PrivacyPrinciplesPage
-import com.privatevault.app.ui.theme.AccentCyan
-import com.privatevault.app.ui.theme.Charcoal600
-import com.privatevault.app.ui.theme.Charcoal800
-import com.privatevault.app.ui.theme.Charcoal900
-import com.privatevault.app.ui.theme.TextPrimaryDark
-import com.privatevault.app.ui.theme.TextSecondaryDark
+import com.privatevault.app.ui.theme.*
 
 @Composable
 fun OnboardingScreen(
@@ -52,7 +55,7 @@ fun OnboardingScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Charcoal900)
+            .background(TitaniumCanvas)
             .statusBarsPadding()
             .navigationBarsPadding()
     ) {
@@ -86,22 +89,26 @@ fun OnboardingScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Charcoal800)
-                .padding(horizontal = 24.dp, vertical = 16.dp),
+                .background(TitaniumSurfaceGlass)
+                .border(1.dp, BorderSubtle)
+                .padding(horizontal = 24.dp, vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Page indicators
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(bottom = 16.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(bottom = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 repeat(state.totalPages) { index ->
                     val isSelected = index == state.currentPage
                     Box(
                         modifier = Modifier
-                            .size(if (isSelected) 10.dp else 8.dp)
-                            .clip(CircleShape)
-                            .background(if (isSelected) AccentCyan else Charcoal600)
+                            .height(6.dp)
+                            .width(if (isSelected) 24.dp else 6.dp)
+                            .animateContentSize()
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(if (isSelected) TitaniumWhite else BorderSubtle)
                     )
                 }
             }
@@ -116,27 +123,31 @@ fun OnboardingScreen(
                     OutlinedButton(
                         onClick = viewModel::onPreviousPage,
                         colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = TextSecondaryDark
-                        )
+                            contentColor = TextSecondary
+                        ),
+                        shape = RoundedCornerShape(20.dp)
                     ) {
-                        Text("Back")
+                        Text("Back", color = TextSecondary)
                     }
                 } else {
-                    Box(modifier = Modifier.size(1.dp))
+                    Spacer(modifier = Modifier.size(1.dp))
                 }
 
                 Button(
                     onClick = viewModel::onNextPage,
                     enabled = state.canProceed,
+                    shape = RoundedCornerShape(20.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = AccentCyan,
-                        contentColor = Charcoal900,
-                        disabledContainerColor = Charcoal600,
-                        disabledContentColor = TextSecondaryDark
+                        containerColor = TitaniumWhite,
+                        contentColor = TitaniumTextDark,
+                        disabledContainerColor = KeypadBg,
+                        disabledContentColor = TextDisabled
                     )
                 ) {
                     Text(
-                        if (state.currentPage == state.totalPages - 1) "Enter Vault" else "Continue"
+                        text = if (state.currentPage == state.totalPages - 1) "Enter PrivateLens" else "Continue",
+                        fontWeight = FontWeight.Bold,
+                        color = if (state.canProceed) TitaniumTextDark else TextDisabled
                     )
                 }
             }

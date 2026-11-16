@@ -1,6 +1,7 @@
 package com.privatevault.app.ui.sharing
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -63,17 +64,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.privatevault.app.domain.model.MediaItem
 import com.privatevault.app.domain.model.SharingPermission
-import com.privatevault.app.ui.theme.AccentCyan
-import com.privatevault.app.ui.theme.AccentEmerald
-import com.privatevault.app.ui.theme.AlertRed
-import com.privatevault.app.ui.theme.Charcoal700
-import com.privatevault.app.ui.theme.Charcoal800
-import com.privatevault.app.ui.theme.Charcoal900
-import com.privatevault.app.ui.theme.TextPrimaryDark
-import com.privatevault.app.ui.theme.TextSecondaryDark
+import com.privatevault.app.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -171,16 +166,16 @@ fun PrivateSharingScreen(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = "End-to-End Ephemeral Streaming",
+                            text = "Mandatory Privacy & Screen Disclosure",
                             style = MaterialTheme.typography.labelLarge,
-                            color = AccentCyan,
+                            color = AmberSafety,
                             fontWeight = FontWeight.SemiBold
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Recordings are never uploaded to any cloud server. Viewing permissions enforce view-only access with zero download, export, or forwarding capabilities.",
+                            text = "Only the selected recipient can access this recording through PrivateLens. Downloading and forwarding are disabled within the application. However, we cannot prevent someone from recording the screen using another device. Revoking access prevents future access but cannot undo content already viewed or independently captured.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondaryDark
+                            color = Zinc300
                         )
                     }
                 }
@@ -444,7 +439,7 @@ private fun CreateShareDialog(
                         value = recipientId,
                         onValueChange = { recipientId = it },
                         label = { Text("Recipient Account / User ID") },
-                        placeholder = { Text("e.g. partner-device-id") },
+                        placeholder = { Text("e.g. Paired Partner (Alex) or Vault ID") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -495,6 +490,26 @@ private fun CreateShareDialog(
                                 Text(label, style = MaterialTheme.typography.bodySmall, color = TextPrimaryDark)
                             }
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Honest Sharing Disclosure
+                    Card(
+                        shape = RoundedCornerShape(8.dp),
+                        colors = CardDefaults.cardColors(containerColor = KeypadBg),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(0.5.dp, BorderSubtle, RoundedCornerShape(8.dp))
+                    ) {
+                        Text(
+                            text = "Only the selected recipient can access this recording through PrivateLens. Downloading and forwarding are disabled within the application. However, we cannot prevent someone from recording the screen using another device. Revoking access prevents future access but cannot undo content already viewed or independently captured.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary,
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp,
+                            modifier = Modifier.padding(10.dp)
+                        )
                     }
                 }
             }
