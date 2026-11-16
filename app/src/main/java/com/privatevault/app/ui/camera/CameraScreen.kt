@@ -182,40 +182,32 @@ fun CameraScreen(
             }
 
             if (currentFilter != PrivacyFilter.ORIGINAL) {
-                // Live Viewfinder Real-Time Shader Simulation
-                val overlayColor = when (currentFilter) {
-                    PrivacyFilter.CLEAN_GLOW -> Color(0x22FFE0B2) // Warm soft glow
-                    PrivacyFilter.GOLDEN_HOUR -> Color(0x33FFB300) // Rich amber sunset
-                    PrivacyFilter.GLASS_SKIN -> Color(0x22E1F5FE) // Luminous dewy sheen
-                    PrivacyFilter.VINTAGE_90S -> Color(0x33D7CCC8) // Analog film tone
-                    PrivacyFilter.VOGUE_NOIR -> Color(0x66424242) // Dramatic monochrome
-                    PrivacyFilter.BLUSH_PEACH -> Color(0x33FFCCBC) // Flattering rosy blush
-                    PrivacyFilter.CYBER_MOODY -> Color(0x3300838F) // Cinematic teal & orange
-                    PrivacyFilter.ETHEREAL_DREAM -> Color(0x33FFF9C4) // Angelic highlight bloom
-                    PrivacyFilter.NIGHT_BOOST -> Color(0x2237474F) // Night clarity lift
-                    PrivacyFilter.ANONYMIZE -> Color(0x55212121) // Privacy shield
-                    PrivacyFilter.ORIGINAL -> Color.Transparent
-                }
-
-                Canvas(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .alpha(0.35f)
-                ) {
-                    drawRect(color = overlayColor, blendMode = BlendMode.Color)
-                }
-
-                // Live Viewfinder Corner Vignette for Film / Golden Hour / Noir
+                // Live Viewfinder Vignette Overlay for Golden Hour, 90s Film, Noir & Teal-Orange
                 if (currentFilter in listOf(PrivacyFilter.GOLDEN_HOUR, PrivacyFilter.VINTAGE_90S, PrivacyFilter.VOGUE_NOIR, PrivacyFilter.CYBER_MOODY)) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .background(
                                 androidx.compose.ui.graphics.Brush.radialGradient(
-                                    colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.55f))
+                                    colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.52f))
                                 )
                             )
                     )
+                }
+
+                // Live Subtle Ambient Atmosphere (Overlay blend mode preserves blacks and highlights)
+                val ambientMood = when (currentFilter) {
+                    PrivacyFilter.GOLDEN_HOUR -> Color(0x35FFA000)
+                    PrivacyFilter.BLUSH_PEACH -> Color(0x28FF8A80)
+                    PrivacyFilter.VOGUE_NOIR -> Color(0x45212121)
+                    PrivacyFilter.CYBER_MOODY -> Color(0x2800ACC1)
+                    PrivacyFilter.ETHEREAL_DREAM -> Color(0x25FFF59D)
+                    else -> Color.Transparent
+                }
+                if (ambientMood != Color.Transparent) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        drawRect(color = ambientMood, blendMode = BlendMode.Overlay)
+                    }
                 }
 
                 // Active Filter Watermark Tag
