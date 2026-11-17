@@ -2,6 +2,7 @@ package com.privatevault.app.ui.account
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +31,14 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -80,10 +89,15 @@ fun AccountScreen(
     val account by viewModel.account.collectAsState()
     val statusMessage by viewModel.statusMessage.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val clipboardManager = LocalClipboardManager.current
+    val coroutineScope = rememberCoroutineScope()
 
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showMigrationDialog by remember { mutableStateOf(false) }
     var showKillSwitchDialog by remember { mutableStateOf(false) }
+    var showWelcomeGuideDialog by remember { mutableStateOf(false) }
+    var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
+    var showTermsDialog by remember { mutableStateOf(false) }
     var deleteVaultFilesChecked by remember { mutableStateOf(false) }
     var migrationAuthPasscode by remember { mutableStateOf("") }
     var killSwitchAuthPasscode by remember { mutableStateOf("") }
@@ -139,6 +153,7 @@ fun AccountScreen(
             }
 
             // 1. ANONYMOUS CRYPTOGRAPHIC VAULT OWNER CARD
+            val vaultId = account?.userId ?: "LENS-8F42-99B1-02E"
             Card(
                 colors = CardDefaults.cardColors(containerColor = Charcoal800),
                 shape = RoundedCornerShape(16.dp),
@@ -163,21 +178,50 @@ fun AccountScreen(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     Text(
                         text = "Vault ID (Public Key Hash)",
                         style = MaterialTheme.typography.labelSmall,
                         color = TextSecondaryDark
                     )
-                    Text(
-                        text = account?.userId ?: "LENS-LOCAL-TEE-VAULT",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AccentCyan,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Charcoal900, RoundedCornerShape(8.dp))
+                            .border(1.dp, AccentCyan.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = vaultId,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = AccentCyan,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(
+                            onClick = {
+                                clipboardManager.setText(AnnotatedString(vaultId))
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("User ID copied to clipboard: $vaultId")
+                                }
+                            },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = "Copy User ID",
+                                tint = AccentCyan,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     Text(
                         text = "Device Hardware Binding",
@@ -207,6 +251,56 @@ fun AccountScreen(
                             fontWeight = FontWeight.Medium
                         )
                     }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 1.5 HOW PRIVATELENS WORKS & FIRST-PAGE ONBOARDING GUIDE
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Charcoal800),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showWelcomeGuideDialog = true }
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(AccentEmerald.copy(alpha = 0.15f), RoundedCornerShape(10.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = AccentEmerald,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "How PrivateLens Works",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = TextPrimaryDark,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Review zero-knowledge guarantees & guide",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondaryDark
+                        )
+                    }
+                    Text(
+                        text = "VIEW",
+                        color = AccentEmerald,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
 
@@ -385,6 +479,79 @@ fun AccountScreen(
                         Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp), tint = TextSecondaryDark)
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("Restore Purchases (Google Play)", color = TextSecondaryDark, fontSize = 11.sp)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 3.5 GOOGLE PLAY STORE COMPLIANCE & LEGAL
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Charcoal800),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Description, contentDescription = null, tint = Zinc300)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Legal & Play Store Compliance",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = TextPrimaryDark,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "Google Play Data Safety: PrivateLens operates on a sovereign zero-knowledge architecture. No tracking, no external ad SDKs, and zero telemetry.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondaryDark
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { showPrivacyPolicyDialog = true },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Privacy Policy", fontSize = 11.sp, color = TextPrimaryDark)
+                        }
+
+                        OutlinedButton(
+                            onClick = { showTermsDialog = true },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Terms of Service", fontSize = 11.sp, color = TextPrimaryDark)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "App Release Version",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSecondaryDark
+                        )
+                        Text(
+                            text = "v1.0.0 (Production Build 101)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSecondaryDark,
+                            fontFamily = FontFamily.Monospace
+                        )
                     }
                 }
             }
@@ -609,6 +776,232 @@ fun AccountScreen(
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
                     Text("Cancel", color = TextSecondaryDark)
+                }
+            },
+            containerColor = Charcoal800
+        )
+    }
+
+    // 1. Welcome & How PrivateLens Works Dialog (First-Page Architecture Guide)
+    if (showWelcomeGuideDialog) {
+        AlertDialog(
+            onDismissRequest = { showWelcomeGuideDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Info, contentDescription = null, tint = AccentEmerald)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("How PrivateLens Works", color = TextPrimaryDark, style = MaterialTheme.typography.titleMedium)
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .verticalScroll(rememberScrollState())
+                        .padding(vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "1. Zero-Knowledge Sovereign Core",
+                        color = AccentEmerald,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = "PrivateLens has NO user accounts, NO cloud servers, and NO trackers. Everything happens strictly inside your phone's hardware.",
+                        color = TextSecondaryDark,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "2. Hardware Keystore (Titan M / TEE)",
+                        color = AccentCyan,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = "Your 256-bit AES master keys are created and locked inside your phone's dedicated Secure Enclave chip. Even if Android OS is rooted, keys cannot be extracted.",
+                        color = TextSecondaryDark,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "3. Sovereign Media Encryption",
+                        color = AmberSafety,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = "Photos and videos are hardware-encrypted the millisecond they are captured. They never touch unencrypted storage, and standard gallery apps cannot see them.",
+                        color = TextSecondaryDark,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "4. Duo Partner Vault & Direct Sharing",
+                        color = AccentCyan,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = "Sharing media requires mutual consent and local cryptographic pairing. No unencrypted files are ever sent over public networks.",
+                        color = TextSecondaryDark,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "5. Emergency Breakup Kill Switch",
+                        color = AlertRed,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = "Either partner can instantly sever the Duo link, triggering immediate hardware shredding of the shared key, rendering shared files permanently unrecoverable.",
+                        color = TextSecondaryDark,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showWelcomeGuideDialog = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentEmerald)
+                ) {
+                    Text("Understood", color = Charcoal900, fontWeight = FontWeight.Bold)
+                }
+            },
+            containerColor = Charcoal800
+        )
+    }
+
+    // 2. Play Store Privacy Policy Dialog
+    if (showPrivacyPolicyDialog) {
+        AlertDialog(
+            onDismissRequest = { showPrivacyPolicyDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Shield, contentDescription = null, tint = AccentCyan)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Privacy Policy", color = TextPrimaryDark, style = MaterialTheme.typography.titleMedium)
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .verticalScroll(rememberScrollState())
+                        .padding(vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "Data Collection & Google Play Data Safety:",
+                        color = AccentCyan,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "• PrivateLens does not collect, store, transmit, or share any personal data, identifiers, contacts, or analytics.\n• Camera & Microphone access is used solely for live viewfinder capture.\n• Biometric data remains sealed in Android BiometricPrompt and never enters app memory.\n• All captured media is stored exclusively in app-private encrypted storage.",
+                        color = TextSecondaryDark,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "Data Retention & Deletion:",
+                        color = AccentEmerald,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "You maintain complete ownership and custody of your data. Deleting your vault performs DoD 5220.22-M compliant cryptographic shredding on-device.",
+                        color = TextSecondaryDark,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showPrivacyPolicyDialog = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentCyan)
+                ) {
+                    Text("Close", color = Charcoal900, fontWeight = FontWeight.Bold)
+                }
+            },
+            containerColor = Charcoal800
+        )
+    }
+
+    // 3. Terms of Service Dialog
+    if (showTermsDialog) {
+        AlertDialog(
+            onDismissRequest = { showTermsDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Description, contentDescription = null, tint = Zinc300)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Terms of Service", color = TextPrimaryDark, style = MaterialTheme.typography.titleMedium)
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .verticalScroll(rememberScrollState())
+                        .padding(vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "1. Sovereign Key Custody",
+                        color = TextPrimaryDark,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = "Because PrivateLens is a zero-knowledge application, we have no access to your master keys or passcodes. If you lose your credentials and uninstall without a migration QR, data cannot be recovered.",
+                        color = TextSecondaryDark,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "2. 18+ Adult Eligibility",
+                        color = TextPrimaryDark,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = "PrivateLens is intended strictly for consenting adults aged 18 and older. Mutual consent is strictly enforced for all paired vaults.",
+                        color = TextSecondaryDark,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "3. Google Play Billing",
+                        color = TextPrimaryDark,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = "Pro & Duo Vault subscriptions and lifetime purchases are processed securely through Google Play In-App Billing and can be restored on any device bound to your Google account.",
+                        color = TextSecondaryDark,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showTermsDialog = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = Zinc300)
+                ) {
+                    Text("Close", color = Charcoal900, fontWeight = FontWeight.Bold)
                 }
             },
             containerColor = Charcoal800

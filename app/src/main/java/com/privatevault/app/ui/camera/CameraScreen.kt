@@ -462,44 +462,21 @@ fun CameraScreen(
                 }
             }
 
-            // Right: Flip Camera and Lenses Filter Toggle
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+            // Right: Lenses & Beauty Filter Toggle (Camera flipping is done by double-tapping the viewfinder)
+            IconButton(
+                onClick = { showFilterCarousel = !showFilterCarousel },
+                enabled = !recordingState.isRecording,
+                modifier = Modifier
+                    .size(42.dp)
+                    .background(if (showFilterCarousel || currentFilter != PrivacyFilter.ORIGINAL) TitaniumWhite else TitaniumSurfaceGlass, CircleShape)
+                    .border(1.dp, BorderSubtle, CircleShape)
             ) {
-                // Lenses & Beauty Filter Toggle
-                IconButton(
-                    onClick = { showFilterCarousel = !showFilterCarousel },
-                    enabled = !recordingState.isRecording,
-                    modifier = Modifier
-                        .size(42.dp)
-                        .background(if (showFilterCarousel || currentFilter != PrivacyFilter.ORIGINAL) TitaniumWhite else TitaniumSurfaceGlass, CircleShape)
-                        .border(1.dp, BorderSubtle, CircleShape)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.AutoFixHigh,
-                        contentDescription = "Lenses & Filters",
-                        tint = if (showFilterCarousel || currentFilter != PrivacyFilter.ORIGINAL) TitaniumTextDark else TitaniumWhite,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                // Flip Camera (Front / Back)
-                IconButton(
-                    onClick = { viewModel.switchLens() },
-                    enabled = !recordingState.isRecording,
-                    modifier = Modifier
-                        .size(42.dp)
-                        .background(TitaniumSurfaceGlass, CircleShape)
-                        .border(1.dp, BorderSubtle, CircleShape)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Cameraswitch,
-                        contentDescription = "Flip Camera",
-                        tint = TitaniumWhite,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.AutoFixHigh,
+                    contentDescription = "Lenses & Filters",
+                    tint = if (showFilterCarousel || currentFilter != PrivacyFilter.ORIGINAL) TitaniumTextDark else TitaniumWhite,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
 
@@ -552,7 +529,7 @@ fun CameraScreen(
         }
 
         // ═══════════════════════════════════════════════════════════════════
-        // BOTTOM CONTROLS & DOCK (Transparent Full-Viewfinder Scrim)
+        // BOTTOM CONTROLS & DOCK (Compact Full-Viewfinder Scrim)
         // ═══════════════════════════════════════════════════════════════════
         Column(
             modifier = Modifier
@@ -562,12 +539,12 @@ fun CameraScreen(
                     androidx.compose.ui.graphics.Brush.verticalGradient(
                         colors = listOf(
                             Color.Transparent,
-                            Color.Black.copy(alpha = 0.55f)
+                            Color.Black.copy(alpha = 0.50f)
                         )
                     )
                 )
                 .navigationBarsPadding()
-                .padding(bottom = 12.dp, top = 20.dp),
+                .padding(bottom = 6.dp, top = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // SNAPCHAT LENS CAROUSEL (Horizontal Strip with Spring Scaling)
@@ -691,7 +668,7 @@ fun CameraScreen(
                         }
                     )
                 }
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(6.dp))
             }
 
             // ═══════════════════════════════════════════════════════════════
@@ -742,7 +719,7 @@ fun CameraScreen(
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(8.dp))
             }
 
             // ═══════════════════════════════════════════════════════════════
@@ -755,7 +732,7 @@ fun CameraScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // LEFT: Encrypted Vault Shortcut (Snapchat Memories / Camera Roll)
+                // LEFT: Encrypted Vault Shortcut
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.clickable {
@@ -765,42 +742,42 @@ fun CameraScreen(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(54.dp)
-                            .clip(RoundedCornerShape(16.dp))
+                            .size(46.dp)
+                            .clip(RoundedCornerShape(14.dp))
                             .background(TitaniumSurfaceGlass)
-                            .border(1.5.dp, BorderHighlight, RoundedCornerShape(16.dp)),
+                            .border(1.2.dp, BorderHighlight, RoundedCornerShape(14.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.PhotoLibrary,
                             contentDescription = "Encrypted Vault",
                             tint = TitaniumWhite,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(22.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.height(3.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = "VAULT",
                         color = TitaniumSilver,
-                        fontSize = 10.sp,
+                        fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
+                        letterSpacing = 0.8.sp
                     )
                 }
 
-                // CENTER: Big Shutter with Snapchat Hold-to-Record Gesture
+                // CENTER: Compact Shutter with Hold-to-Record
                 Box(
                     modifier = Modifier
                         .scale(shutterScale)
-                            .size(86.dp)
-                            .border(
-                                width = if (recordingState.isRecording) 4.dp else 3.5.dp,
-                                color = if (recordingState.isRecording) LeicaRed else TitaniumSilver,
-                                shape = CircleShape
-                            )
-                            .padding(5.dp)
-                            .clip(CircleShape)
-                            .background(if (recordingState.isRecording || captureMode == CaptureMode.VIDEO) LeicaRed else TitaniumWhite)
+                        .size(72.dp)
+                        .border(
+                            width = if (recordingState.isRecording) 3.5.dp else 3.dp,
+                            color = if (recordingState.isRecording) LeicaRed else TitaniumSilver,
+                            shape = CircleShape
+                        )
+                        .padding(4.dp)
+                        .clip(CircleShape)
+                        .background(if (recordingState.isRecording || captureMode == CaptureMode.VIDEO) LeicaRed else TitaniumWhite)
                             .pointerInput(recordingState.isRecording, captureMode) {
                                 awaitEachGesture {
                                     val down = awaitFirstDown()
@@ -901,26 +878,26 @@ fun CameraScreen(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(54.dp)
+                            .size(46.dp)
                             .clip(CircleShape)
                             .background(TitaniumSurfaceGlass)
-                            .border(1.5.dp, BorderHighlight, CircleShape),
+                            .border(1.2.dp, BorderHighlight, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Share,
                             contentDescription = "Friends & Controlled Sharing",
                             tint = TitaniumWhite,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(22.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.height(3.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = "FRIENDS",
                         color = TitaniumSilver,
-                        fontSize = 10.sp,
+                        fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
+                        letterSpacing = 0.8.sp
                     )
                 }
             }
