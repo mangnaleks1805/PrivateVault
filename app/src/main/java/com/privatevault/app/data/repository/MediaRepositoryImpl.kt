@@ -104,12 +104,28 @@ class MediaRepositoryImpl @Inject constructor(
         val thumbRelativePath = "thumbs/${id}_thumb.enc"
         val thumbFile = File(context.filesDir, thumbRelativePath)
         runCatching {
-            val bitmap = BitmapFactory.decodeFile(tempFile.absolutePath)
-            if (bitmap != null) {
-                val scaled = Bitmap.createScaledBitmap(bitmap, 320, (320f / bitmap.width * bitmap.height).toInt().coerceAtLeast(1), true)
+            // Ultra-fast thumbnail extraction via downsampling (avoids loading massive full camera resolution into RAM)
+            val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(tempFile.absolutePath, boundsOptions)
+            var sampleSize = 1
+            val targetSize = 320
+            while (boundsOptions.outWidth / (sampleSize * 2) >= targetSize &&
+                boundsOptions.outHeight / (sampleSize * 2) >= targetSize
+            ) {
+                sampleSize *= 2
+            }
+            val decodeOptions = BitmapFactory.Options().apply {
+                inSampleSize = sampleSize
+                inPreferredConfig = Bitmap.Config.RGB_565
+            }
+            val downsampled = BitmapFactory.decodeFile(tempFile.absolutePath, decodeOptions)
+            if (downsampled != null) {
+                val scaled = Bitmap.createScaledBitmap(downsampled, 320, (320f / downsampled.width * downsampled.height).toInt().coerceAtLeast(1), true)
                 encryptionService.encryptBitmap(scaled, thumbFile, dek)
-                bitmap.recycle()
-                scaled.recycle()
+                downsampled.recycle()
+                if (scaled != downsampled) {
+                    scaled.recycle()
+                }
             }
         }
 
@@ -194,9 +210,8 @@ class MediaRepositoryImpl @Inject constructor(
         val entity = mediaItemDao.getMediaById(mediaItem.id) ?: return@withContext null
         val dek = encryptionService.unwrapDEK(entity.encryptedDekBlob)
         runCatching {
-            encryptionService.decryptFileToStream(encryptedFile, dek).use { stream ->
-                BitmapFactory.decodeStream(stream)
-            }
+            val decryptedBytes = encryptionService.decryptFileToBytes(encryptedFile, dek)
+            BitmapFactory.decodeByteArray(decryptedBytes, 0, decryptedBytes.size)
         }.getOrNull()
     }
 

@@ -1,21 +1,18 @@
 package com.privatevault.app.core.playback
 
-import android.content.Context
 import android.net.Uri
 import androidx.media3.common.C
 import androidx.media3.datasource.BaseDataSource
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import com.privatevault.app.core.security.EncryptionService
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
-import java.io.InputStream
 
 /**
  * Custom AndroidX Media3 DataSource that plays encrypted videos directly in memory.
- * Never creates an unencrypted file on disk.
+ * Never creates an unencrypted file on disk. Decrypts once into RAM and supports
+ * instantaneous zero-latency random seeking across MP4 atoms.
  */
 class EncryptedMediaDataSource(
     private val encryptedFile: File,
@@ -24,45 +21,41 @@ class EncryptedMediaDataSource(
 ) : BaseDataSource(/* isNetwork = */ false) {
 
     private var dataSpec: DataSpec? = null
-    private var inputStream: InputStream? = null
-    private var bytesRemaining: Long = 0
+    private var decryptedBytes: ByteArray? = null
+    private var readPosition: Int = 0
+    private var bytesRemaining: Int = 0
     private var opened = false
+
+    private fun ensureDecrypted(): ByteArray {
+        decryptedBytes?.let { return it }
+        val bytes = encryptionService.decryptFileToBytes(encryptedFile, dek)
+        decryptedBytes = bytes
+        return bytes
+    }
 
     override fun open(dataSpec: DataSpec): Long {
         this.dataSpec = dataSpec
         transferInitializing(dataSpec)
 
         try {
-            // Decrypt stream in-memory directly
-            val decryptedStream = encryptionService.decryptFileToStream(encryptedFile, dek)
+            val bytes = ensureDecrypted()
+            val totalLength = bytes.size
 
-            // Read into byte array in memory (protected under FLAG_SECURE)
-            val bos = ByteArrayOutputStream()
-            val buffer = ByteArray(32 * 1024)
-            var read: Int
-            while (decryptedStream.read(buffer).also { read = it } != -1) {
-                bos.write(buffer, 0, read)
+            if (dataSpec.position > totalLength) {
+                throw IOException("Position ${dataSpec.position} exceeds total media length $totalLength")
             }
-            decryptedStream.close()
 
-            val decryptedBytes = bos.toByteArray()
-            val totalLength = decryptedBytes.size.toLong()
-
-            val position = dataSpec.position
-            val length = if (dataSpec.length != C.LENGTH_UNSET.toLong()) {
-                dataSpec.length
+            readPosition = dataSpec.position.toInt()
+            val requestedLength = if (dataSpec.length != C.LENGTH_UNSET.toLong()) {
+                dataSpec.length.toInt()
             } else {
-                totalLength - position
+                totalLength - readPosition
             }
 
-            bytesRemaining = length
-            val bais = ByteArrayInputStream(decryptedBytes)
-            bais.skip(position)
-            this.inputStream = bais
-
+            bytesRemaining = minOf(requestedLength, totalLength - readPosition)
             opened = true
             transferStarted(dataSpec)
-            return bytesRemaining
+            return bytesRemaining.toLong()
         } catch (e: Exception) {
             throw IOException("Error opening encrypted media data source", e)
         }
@@ -70,38 +63,24 @@ class EncryptedMediaDataSource(
 
     override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
         if (length == 0) return 0
-        if (bytesRemaining == 0L) return C.RESULT_END_OF_INPUT
+        if (bytesRemaining <= 0) return C.RESULT_END_OF_INPUT
 
-        val bytesToRead = if (bytesRemaining == C.LENGTH_UNSET.toLong()) {
-            length
-        } else {
-            Math.min(bytesRemaining, length.toLong()).toInt()
-        }
+        val bytes = decryptedBytes ?: return C.RESULT_END_OF_INPUT
+        val bytesToRead = minOf(length, bytesRemaining)
+        System.arraycopy(bytes, readPosition, buffer, offset, bytesToRead)
+        readPosition += bytesToRead
+        bytesRemaining -= bytesToRead
 
-        val bytesRead = inputStream?.read(buffer, offset, bytesToRead) ?: -1
-        if (bytesRead == -1) {
-            return C.RESULT_END_OF_INPUT
-        }
-
-        if (bytesRemaining != C.LENGTH_UNSET.toLong()) {
-            bytesRemaining -= bytesRead.toLong()
-        }
-
-        bytesTransferred(bytesRead)
-        return bytesRead
+        bytesTransferred(bytesToRead)
+        return bytesToRead
     }
 
     override fun getUri(): Uri? = dataSpec?.uri
 
     override fun close() {
-        try {
-            inputStream?.close()
-        } finally {
-            inputStream = null
-            if (opened) {
-                opened = false
-                transferEnded()
-            }
+        if (opened) {
+            opened = false
+            transferEnded()
         }
     }
 

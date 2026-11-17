@@ -100,21 +100,31 @@ class EncryptionService @Inject constructor(
     }
 
     /**
-     * Decrypts an encrypted file and returns an InputStream of plaintext bytes.
-     * Reads the prepended 12-byte IV and initializes a CipherInputStream.
+     * Decrypts an encrypted file directly into a byte array in memory using hardware AES-GCM.
+     * Extracts the 12-byte IV and decrypts the ciphertext + tag in one atomic operation.
      */
-    fun decryptFileToStream(encryptedFile: File, dek: ByteArray): InputStream {
-        val fis = FileInputStream(encryptedFile)
-        val iv = ByteArray(IV_SIZE_BYTES)
-        val bytesRead = fis.read(iv)
-        require(bytesRead == IV_SIZE_BYTES) { "Corrupt encrypted file: missing IV header" }
+    fun decryptFileToBytes(encryptedFile: File, dek: ByteArray): ByteArray {
+        val fileBytes = encryptedFile.readBytes()
+        require(fileBytes.size >= IV_SIZE_BYTES + 16) { "Corrupt encrypted file: too small for IV and auth tag" }
+
+        val iv = fileBytes.copyOfRange(0, IV_SIZE_BYTES)
+        val ciphertext = fileBytes.copyOfRange(IV_SIZE_BYTES, fileBytes.size)
 
         val secretKey = SecretKeySpec(dek, KEY_ALGORITHM)
         val cipher = Cipher.getInstance(ALGORITHM)
         val spec = GCMParameterSpec(TAG_LENGTH_BITS, iv)
         cipher.init(Cipher.DECRYPT_MODE, secretKey, spec)
 
-        return CipherInputStream(fis, cipher)
+        return cipher.doFinal(ciphertext)
+    }
+
+    /**
+     * Decrypts an encrypted file and returns a seekable, authenticated InputStream of plaintext bytes.
+     * Backed by a ByteArrayInputStream so mark/reset and seeking are fully supported.
+     */
+    fun decryptFileToStream(encryptedFile: File, dek: ByteArray): InputStream {
+        val plaintextBytes = decryptFileToBytes(encryptedFile, dek)
+        return java.io.ByteArrayInputStream(plaintextBytes)
     }
 
     /**
@@ -143,14 +153,14 @@ class EncryptionService @Inject constructor(
 
     /**
      * Decrypts an encrypted thumbnail file directly into an in-memory Bitmap.
+     * Reads ciphertext and decodes directly via BitmapFactory.decodeByteArray in native code.
      * Never writes plaintext to cache or disk.
      */
     fun decryptBitmap(encryptedFile: File, dek: ByteArray): Bitmap? {
         if (!encryptedFile.exists()) return null
         return runCatching {
-            decryptFileToStream(encryptedFile, dek).use { inputStream ->
-                BitmapFactory.decodeStream(inputStream)
-            }
+            val decryptedBytes = decryptFileToBytes(encryptedFile, dek)
+            BitmapFactory.decodeByteArray(decryptedBytes, 0, decryptedBytes.size)
         }.getOrNull()
     }
 

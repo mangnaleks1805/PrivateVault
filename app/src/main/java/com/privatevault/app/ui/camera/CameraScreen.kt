@@ -235,6 +235,7 @@ fun CameraScreen(
                     factory = { ctx ->
                         PreviewView(ctx).apply {
                             implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                            scaleType = PreviewView.ScaleType.FILL_CENTER
                             viewModel.bindCamera(lifecycleOwner, this)
                         }
                     },
@@ -461,8 +462,45 @@ fun CameraScreen(
                 }
             }
 
-            // Right: Spacer to keep AES-256 status pill centered without buttons
-            Spacer(modifier = Modifier.size(42.dp))
+            // Right: Flip Camera and Lenses Filter Toggle
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Lenses & Beauty Filter Toggle
+                IconButton(
+                    onClick = { showFilterCarousel = !showFilterCarousel },
+                    enabled = !recordingState.isRecording,
+                    modifier = Modifier
+                        .size(42.dp)
+                        .background(if (showFilterCarousel || currentFilter != PrivacyFilter.ORIGINAL) TitaniumWhite else TitaniumSurfaceGlass, CircleShape)
+                        .border(1.dp, BorderSubtle, CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoFixHigh,
+                        contentDescription = "Lenses & Filters",
+                        tint = if (showFilterCarousel || currentFilter != PrivacyFilter.ORIGINAL) TitaniumTextDark else TitaniumWhite,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                // Flip Camera (Front / Back)
+                IconButton(
+                    onClick = { viewModel.switchLens() },
+                    enabled = !recordingState.isRecording,
+                    modifier = Modifier
+                        .size(42.dp)
+                        .background(TitaniumSurfaceGlass, CircleShape)
+                        .border(1.dp, BorderSubtle, CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Cameraswitch,
+                        contentDescription = "Flip Camera",
+                        tint = TitaniumWhite,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
         }
 
         // ═══════════════════════════════════════════════════════════════════
@@ -514,15 +552,22 @@ fun CameraScreen(
         }
 
         // ═══════════════════════════════════════════════════════════════════
-        // BOTTOM CONTROLS & SNAPCHAT-STYLE LENS DOCK
+        // BOTTOM CONTROLS & DOCK (Transparent Full-Viewfinder Scrim)
         // ═══════════════════════════════════════════════════════════════════
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .background(TitaniumCanvas.copy(alpha = 0.88f))
+                .background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.55f)
+                        )
+                    )
+                )
                 .navigationBarsPadding()
-                .padding(vertical = 12.dp),
+                .padding(bottom = 12.dp, top = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // SNAPCHAT LENS CAROUSEL (Horizontal Strip with Spring Scaling)
@@ -618,50 +663,6 @@ fun CameraScreen(
                     }
                 }
             }
-
-            // Quick Zoom Pills (1x, 2x)
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(TitaniumSurfaceGlass)
-                    .border(1.dp, BorderSubtle, RoundedCornerShape(18.dp))
-                    .padding(horizontal = 4.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                listOf(1f, 2f).forEach { targetZoom ->
-                    val isSelected = (zoomState.zoomRatio - targetZoom).let { it >= -0.15f && it <= 0.15f }
-                    Box(
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(if (isSelected) TitaniumWhite else Color.Transparent)
-                            .clickable {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                viewModel.setZoomRatio(targetZoom)
-                            }
-                            .padding(horizontal = 12.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = "${targetZoom.toInt()}x",
-                            color = if (isSelected) TitaniumTextDark else TextSecondary,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            fontSize = 12.sp
-                        )
-                    }
-                }
-
-                if (zoomState.zoomRatio > 1.15f && (zoomState.zoomRatio - 2f).let { it < -0.15f || it > 0.15f }) {
-                    Text(
-                        text = String.format(Locale.US, "%.1fx", zoomState.zoomRatio),
-                        color = TitaniumSilver,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(horizontal = 6.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
 
             // Mode Selector (PHOTO vs VIDEO)
             if (!recordingState.isRecording) {
@@ -890,32 +891,32 @@ fun CameraScreen(
                         }
                     }
 
-                // RIGHT: Snapchat Filter & Lens Toggle (Replaces Share on Home Screen)
+                // RIGHT: Friends & Controlled Sharing Shortcut
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        showFilterCarousel = !showFilterCarousel
+                        onNavigateToSharing()
                     }
                 ) {
                     Box(
                         modifier = Modifier
                             .size(54.dp)
                             .clip(CircleShape)
-                            .background(if (showFilterCarousel || currentFilter != PrivacyFilter.ORIGINAL) TitaniumWhite else TitaniumSurfaceGlass)
-                            .border(1.5.dp, if (showFilterCarousel || currentFilter != PrivacyFilter.ORIGINAL) TitaniumWhite else BorderHighlight, CircleShape),
+                            .background(TitaniumSurfaceGlass)
+                            .border(1.5.dp, BorderHighlight, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.AutoFixHigh,
-                            contentDescription = "Lenses & Filters",
-                            tint = if (showFilterCarousel || currentFilter != PrivacyFilter.ORIGINAL) TitaniumTextDark else TitaniumWhite,
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Friends & Controlled Sharing",
+                            tint = TitaniumWhite,
                             modifier = Modifier.size(24.dp)
                         )
                     }
                     Spacer(modifier = Modifier.height(3.dp))
                     Text(
-                        text = "LENSES",
+                        text = "FRIENDS",
                         color = TitaniumSilver,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
