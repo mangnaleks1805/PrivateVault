@@ -41,6 +41,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -84,6 +85,8 @@ fun AccountScreen(
     var showMigrationDialog by remember { mutableStateOf(false) }
     var showKillSwitchDialog by remember { mutableStateOf(false) }
     var deleteVaultFilesChecked by remember { mutableStateOf(false) }
+    var migrationAuthPasscode by remember { mutableStateOf("") }
+    var killSwitchAuthPasscode by remember { mutableStateOf("") }
 
     LaunchedEffect(statusMessage) {
         statusMessage?.let {
@@ -450,15 +453,38 @@ fun AccountScreen(
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "1. Install PrivateLens on your new phone.\n2. Tap 'Migrate / Restore Vault' on the new phone to show its QR.\n3. Scan the QR code with this old phone.\n4. Verify your Fingerprint + Master PIN.\n5. Vault streams over local high-speed Wi-Fi Direct.\n6. Old phone performs hardware crypto-shredding on completion.",
+                        text = "1. Install PrivateLens on your new phone.\n2. Tap 'Migrate / Restore Vault' on the new phone to show its QR.\n3. Scan the QR code with this old phone.\n4. Verify your Fingerprint + 12-char Master Passcode.\n5. Vault streams over local high-speed Wi-Fi Direct.\n6. Old phone performs hardware crypto-shredding on completion.",
                         color = TextSecondaryDark,
                         style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "Enter 12-Char Master Passcode to Authorize:",
+                        color = AmberSafety,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = migrationAuthPasscode,
+                        onValueChange = { migrationAuthPasscode = it },
+                        placeholder = { Text("12-character passcode...") },
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             },
             confirmButton = {
-                Button(onClick = { showMigrationDialog = false }, colors = ButtonDefaults.buttonColors(containerColor = AccentCyan)) {
-                    Text("Ready to Scan", color = Charcoal900)
+                Button(
+                    onClick = { 
+                        showMigrationDialog = false
+                        migrationAuthPasscode = ""
+                    }, 
+                    enabled = migrationAuthPasscode.length >= 12,
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentCyan)
+                ) {
+                    Text("Authorize & Scan QR", color = Charcoal900)
                 }
             },
             dismissButton = {
@@ -482,18 +508,38 @@ fun AccountScreen(
                 }
             },
             text = {
-                Text(
-                    text = "Severing the Duo link immediately destroys the shared Dual-Key fragment on both devices. All media in the Duo Vault becomes mathematically scrambled ciphertext and unrecoverable forever.\n\nAre you sure you want to proceed?",
-                    color = TextPrimaryDark,
-                    style = MaterialTheme.typography.bodySmall
-                )
+                Column {
+                    Text(
+                        text = "Severing the Duo link immediately destroys the shared Dual-Key fragment on both devices. All media in the Duo Vault becomes mathematically scrambled ciphertext and unrecoverable forever.\n\nAre you sure you want to proceed?",
+                        color = TextPrimaryDark,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "Enter 12-Char Master Passcode to Confirm Kill Switch:",
+                        color = AlertRed,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = killSwitchAuthPasscode,
+                        onValueChange = { killSwitchAuthPasscode = it },
+                        placeholder = { Text("12-character passcode...") },
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             },
             confirmButton = {
                 Button(
                     onClick = {
                         showKillSwitchDialog = false
+                        killSwitchAuthPasscode = ""
                         viewModel.deleteAccount(deleteLocalVault = false) {}
                     },
+                    enabled = killSwitchAuthPasscode.length >= 12,
                     colors = ButtonDefaults.buttonColors(containerColor = AlertRed)
                 ) {
                     Text("Sever & Wipe Shared Media", color = TextPrimaryDark)

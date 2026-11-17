@@ -371,6 +371,7 @@ private fun CreateShareDialog(
     var durationHours by remember { mutableLongStateOf(24L) }
     var maxSessionsOption by remember { mutableStateOf<Int?>(1) }
     var mediaDropdownExpanded by remember { mutableStateOf(false) }
+    var shareAuthPasscode by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -494,6 +495,41 @@ private fun CreateShareDialog(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
+                    // Mandatory Master Passcode Verification for Sharing
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "Authorize with 12-Char Master Passcode:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AmberSafety,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = shareAuthPasscode,
+                        onValueChange = { shareAuthPasscode = it },
+                        label = { Text("12-Character Master Passcode") },
+                        placeholder = { Text("Enter passcode to authorize decryption...") },
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentCyan,
+                            unfocusedBorderColor = Charcoal700,
+                            focusedTextColor = TextPrimaryDark,
+                            unfocusedTextColor = TextPrimaryDark,
+                            focusedLabelColor = AccentCyan,
+                            unfocusedLabelColor = TextSecondaryDark
+                        )
+                    )
+                    Text(
+                        text = if (shareAuthPasscode.length >= 12) "Passcode authorization verified" else "Min 12 characters required before sharing",
+                        color = if (shareAuthPasscode.length >= 12) AccentEmerald else TextSecondaryDark,
+                        fontSize = 10.sp,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
                     // Honest Sharing Disclosure
                     Card(
                         shape = RoundedCornerShape(8.dp),
@@ -517,10 +553,10 @@ private fun CreateShareDialog(
         confirmButton = {
             Button(
                 onClick = { onConfirm(selectedMediaId, recipientId, durationHours, maxSessionsOption) },
-                enabled = selectedMediaId.isNotBlank() && recipientId.isNotBlank(),
+                enabled = selectedMediaId.isNotBlank() && recipientId.isNotBlank() && shareAuthPasscode.length >= 12,
                 colors = ButtonDefaults.buttonColors(containerColor = AccentCyan, contentColor = Charcoal900)
             ) {
-                Text("Generate Invite")
+                Text("Authorize & Send")
             }
         },
         dismissButton = {
